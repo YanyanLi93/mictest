@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Mobile Phone Microphone Test</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #dff8f4;
+      font-family: Arial, sans-serif;
+      color: #174c50;
+    }
+
+    .container {
+      width: 90%;
+      max-width: 420px;
+      padding: 30px 24px;
+      text-align: center;
+      background: white;
+      border-radius: 28px;
+      box-shadow: 0 10px 30px rgba(0, 80, 80, 0.15);
+    }
+
+    h1 {
+      margin-top: 0;
+    }
+
+    p {
+      line-height: 1.6;
+    }
+
+    button {
+      margin-top: 15px;
+      padding: 14px 26px;
+      border: none;
+      border-radius: 30px;
+      background: #25b8ae;
+      color: white;
+      font-size: 17px;
+    }
+
+    button:disabled {
+      background: #9dbfbc;
+    }
+
+    .circle {
+      width: 170px;
+      height: 170px;
+      margin: 30px auto;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      border-radius: 50%;
+      background: #bceee8;
+      transition: 0.15s;
+      font-size: 20px;
+    }
+
+    .circle.blowing {
+      background: #ffd16e;
+    }
+
+    .meter {
+      width: 100%;
+      height: 20px;
+      overflow: hidden;
+      background: #e5eeee;
+      border-radius: 20px;
+    }
+
+    .meter-fill {
+      width: 0%;
+      height: 100%;
+      background: #25b8ae;
+      transition: width 0.08s;
+    }
+
+    #status {
+      min-height: 25px;
+      margin-top: 18px;
+      font-weight: bold;
+    }
+
+    .small-text {
+      color: #718585;
+      font-size: 13px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h1>Microphone Test</h1>
+
+    <p>
+      Tap start, then gently blow into the microphone at the bottom of your phone.
+    </p>
+
+    <button id="startButton">START</button>
+
+    <div id="circle" class="circle">
+      Waiting to Start
+    </div>
+
+    <div class="meter">
+      <div id="meterFill" class="meter-fill"></div>
+    </div>
+
+    <div id="status">The microphone is not turned on.</div>
+
+  </div>
+
+  <script>
+    const startButton = document.getElementById("startButton");
+    const circle = document.getElementById("circle");
+    const meterFill = document.getElementById("meterFill");
+    const statusText = document.getElementById("status");
+
+    let analyser;
+    let dataArray;
+
+    startButton.addEventListener("click", async () => {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        statusText.textContent = "The current web environment does not support the microphone.";
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false
+          }
+        });
+
+        const audioContext = new AudioContext();
+        const microphone =
+          audioContext.createMediaStreamSource(stream);
+
+        analyser = audioContext.createAnalyser();
+
+        // 数值越大，读取的音频数据越细致
+        analyser.fftSize = 1024;
+
+        dataArray = new Uint8Array(analyser.fftSize);
+
+        microphone.connect(analyser);
+
+        startButton.textContent = "Testing";
+        startButton.disabled = true;
+
+        circle.textContent = "Please blow into the mic.";
+        statusText.textContent = "Microphone is on.";
+
+        detectSound();
+
+      } catch (error) {
+        console.error(error);
+
+        statusText.textContent =
+          "Unable to use the microphone; please check your browser permissions.";
+      }
+    });
+
+    function detectSound() {
+      analyser.getByteTimeDomainData(dataArray);
+
+      let sum = 0;
+
+      for (let i = 0; i < dataArray.length; i++) {
+        const value = (dataArray[i] - 128) / 128;
+        sum += value * value;
+      }
+
+      // RMS：估算当前声音强度
+      const rms = Math.sqrt(sum / dataArray.length);
+
+      // 转换成 0 到 100 的显示数值
+      const level = Math.min(100, Math.round(rms * 500));
+
+      meterFill.style.width = level + "%";
+
+      // 这个阈值之后可以根据手机测试结果调整
+      if (level > 18) {
+        circle.classList.add("blowing");
+        circle.textContent = "Blowing detected";
+        statusText.textContent = "Sound intensity：" + level;
+        circle.style.transform = `scale(${1 + level / 400})`;
+      } else {
+        circle.classList.remove("blowing");
+        circle.textContent = "Please blow into the mic";
+        statusText.textContent = "Sound intensity：" + level;
+        circle.style.transform = "scale(1)";
+      }
+
+      requestAnimationFrame(detectSound);
+    }
+  </script>
+</body>
+</html>
